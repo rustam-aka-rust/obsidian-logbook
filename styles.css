@@ -1,0 +1,203 @@
+/* --- Статусбар --------------------------------------------------------- */
+
+.logbook-status {
+  cursor: pointer;
+}
+
+.logbook-status.is-running {
+  color: var(--color-green);
+  font-weight: var(--font-semibold);
+}
+
+/* --- Панель в сайдбаре -------------------------------------------------- */
+
+.logbook-panel {
+  padding: 0.6em 0.8em;
+}
+
+.logbook-panel hr {
+  margin: 0.85em 0;
+  border: none;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.lp-total {
+  text-align: center;
+}
+
+.lp-total-num {
+  font-family: var(--font-monospace);
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.lp-total-cap {
+  font-size: 0.7em;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.lp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  margin-bottom: 0.5em;
+}
+
+.lp-field label {
+  font-size: 0.75em;
+  color: var(--text-muted);
+}
+
+.lp-field input {
+  width: 100%;
+}
+
+.lp-start {
+  width: 100%;
+  margin-top: 0.3em;
+}
+
+.lp-elapsed {
+  font-family: var(--font-monospace);
+  font-size: 1.6em;
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-green);
+}
+
+.lp-activity {
+  text-align: center;
+  color: var(--text-muted);
+  margin-bottom: 0.6em;
+}
+
+.lp-btns {
+  display: flex;
+  gap: 0.4em;
+}
+
+.lp-btns button {
+  flex: 1;
+}
+
+.lp-today-h {
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.4em;
+}
+
+.lp-row {
+  display: flex;
+  gap: 0.5em;
+  align-items: baseline;
+  padding: 0.18em 0;
+  font-size: 0.9em;
+}
+
+.lp-row .lp-dur {
+  font-family: var(--font-monospace);
+  min-width: 3.6em;
+  color: var(--text-muted);
+}
+
+.lp-row .lp-act {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-row .lp-src {
+  flex: 0 0 auto;
+}
+
+.lp-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 0.9em;
+}
+
+.lp-harvest {
+  width: 100%;
+}
+
+/* --- Дашборд в TimeLog-файле (cssclass: logbook) ----------------------- */
+/* Применяется только к заметкам с `cssclasses: [logbook]` во frontmatter. */
+
+.logbook table {
+  font-family: var(--font-monospace);
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  border: 2px solid var(--text-normal);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 3px 3px 0 var(--background-modifier-border);
+}
+
+.logbook th,
+.logbook td {
+  border: 1px solid var(--background-modifier-border);
+  padding: 0.55em 0.85em;
+  vertical-align: middle;
+}
+
+.logbook thead th {
+  background: var(--background-secondary);
+  font-weight: 700;
+  text-align: left;
+}
+
+.logbook tbody tr:hover {
+  background: var(--background-secondary);
+}
+
+/* Колонка «Ист.» — узкая, по центру (▶ намерял / 📓 из дейлика). */
+.logbook th:last-child,
+.logbook td:last-child {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* Дневной Total → крупная центрированная цифра, как на скриншоте. */
+.logbook .callout[data-callout="logbook-total"] {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  margin: 0.3em 0 1.1em;
+  padding: 0;
+}
+
+.logbook .callout[data-callout="logbook-total"] .callout-icon,
+.logbook .callout[data-callout="logbook-total"] .callout-fold {
+  display: none;
+}
+
+.logbook .callout[data-callout="logbook-total"] .callout-title {
+  display: block;
+  text-align: center;
+  padding: 0;
+}
+
+.logbook .callout[data-callout="logbook-total"] .callout-title-inner {
+  font-family: var(--font-monospace);
+  font-size: 2.1em;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.logbook .callout[data-callout="logbook-total"] .callout-title::after {
+  content: "Total";
+  display: block;
+  font-size: 0.45em;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}

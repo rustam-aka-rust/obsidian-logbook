@@ -1,0 +1,11 @@
+node_modules/
+main.js
+*.js.map
+data.json
+.DS_Store
+.obsidian-plugin-dir
+
+# Локальные доки разработки (не публикуем)
+CLAUDE.md
+SPEC.md
+TASKS.md

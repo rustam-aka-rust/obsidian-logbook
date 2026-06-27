@@ -1,0 +1,9 @@
+{
+  "id": "logbook",
+  "name": "Logbook",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Быстрый org-clock таймер: старт/стоп → запись в месячный logbook (TimeLog/YYYY-MM.md).",
+  "author": "Rustam Agamaliev",
+  "isDesktopOnly": false
+}
