@@ -1,6 +1,6 @@
 {
   "name": "obsidian-logbook",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Obsidian time-tracking plugin (org-clock style) → monthly logbook.",
   "main": "main.js",
   "type": "module",

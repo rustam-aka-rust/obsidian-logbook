@@ -5,7 +5,11 @@ data.json
 .DS_Store
 .obsidian-plugin-dir
 
+# Локальные настройки инструментов (не публикуем)
+.claude/
+
 # Локальные доки разработки (не публикуем)
 CLAUDE.md
 SPEC.md
 TASKS.md
+project_journey.md

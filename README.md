@@ -24,9 +24,17 @@ the same monthly log.
 
 ## Screenshots
 
-<!-- TODO: add screenshots before publishing to the community catalog -->
-<!-- ![Logbook file view](docs/file-view.png) -->
-<!-- ![Sidebar panel](docs/panel.png) -->
+The monthly logbook file — per-day totals and a styled table (`▶` measured with the stopwatch, `📓` harvested from a daily note):
+
+![Logbook file view](docs/timelog-file.jpg)
+
+The sidebar panel — today's total, start/stop, live timer, today's entries (shown here with the English UI):
+
+![Sidebar panel](docs/sidebar-panel.jpg)
+
+A daily note with inline time markers that get harvested:
+
+![Daily note markers](docs/daily-markers.jpg)
 
 Example of a generated `TimeLog/2026-06.md` day section:
 

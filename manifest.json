@@ -1,7 +1,7 @@
 {
   "id": "logbook",
   "name": "Logbook",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.5.0",
   "description": "Org-clock style time tracker: a one-click stopwatch into a monthly logbook, with time markers harvested from daily notes.",
   "author": "Rustam Agamaliev",
