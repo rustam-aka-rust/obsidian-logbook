@@ -31,4 +31,6 @@ jobs:
           gh release create "$tag" \
             main.js manifest.json styles.css \
             --title "$tag" \
-            --notes "Release $tag"
+            --notes "Release $tag" \
+          || gh release upload "$tag" \
+            main.js manifest.json styles.css --clobber
