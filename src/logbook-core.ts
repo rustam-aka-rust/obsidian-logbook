@@ -3,9 +3,16 @@
 // чтобы её можно было тестировать отдельно (см. TASKS.md, раздел 2).
 // ---------------------------------------------------------------------------
 
-export const TABLE_HEADER =
-  "| Старт | Стоп  | Длит | Категория | Занятие | Ист. |";
-export const TABLE_SEP = "|-------|-------|------|-----------|---------|------|";
+/** Канонический порядок колонок (язык подставляется при записи). */
+export const COLS_DEFAULT = ["Start", "Stop", "Dur", "Category", "Activity", "Src"];
+
+/** Строит строку-шапку таблицы из подписей колонок. */
+export function makeTableHeader(cols: string[] = COLS_DEFAULT): string {
+  return "| " + cols.join(" | ") + " |";
+}
+
+export const TABLE_HEADER = makeTableHeader();
+export const TABLE_SEP = "| --- | --- | --- | --- | --- | --- |";
 
 /** CSS-класс заметки (frontmatter `cssclasses`), под который заточен styles.css. */
 export const CSS_CLASS = "logbook";
@@ -259,7 +266,18 @@ export function renderRow(r: LogRow): string {
   )} | ${r.src} |`;
 }
 
-/** Разбирает строки таблицы внутри секции дня (без шапки/сепаратора). */
+/** Является ли строка сепаратором таблицы (`|---|---|`), независимо от языка. */
+function isSeparatorRow(line: string): boolean {
+  return (
+    line.trim().startsWith("|") && line.replace(/[\s|:\-–—]/g, "") === ""
+  );
+}
+
+/**
+ * Разбирает строки данных таблицы внутри секции дня. Шапку находим по структуре
+ * (строка прямо над сепаратором), а не по тексту — поэтому язык колонок и старые
+ * файлы не важны.
+ */
 export function parseRowsInSection(content: string, dateHeading: string): LogRow[] {
   const lines = content.split("\n");
   const range = sectionRange(lines, dateHeading);
@@ -268,9 +286,9 @@ export function parseRowsInSection(content: string, dateHeading: string): LogRow
   for (let i = range.headingIdx + 1; i < range.end; i++) {
     const line = lines[i];
     if (!line.trim().startsWith("|")) continue;
-    if (line.replace(/[\s|:\-–—]/g, "") === "") continue; // сепаратор
+    if (isSeparatorRow(line)) continue; // сепаратор
+    if (i + 1 < range.end && isSeparatorRow(lines[i + 1])) continue; // шапка
     const cells = line.split("|");
-    if ((cells[1] ?? "").trim() === "Старт") continue; // шапка
     rows.push({
       start: (cells[1] ?? "").trim(),
       end: (cells[2] ?? "").trim(),
@@ -306,6 +324,7 @@ export function syncDayFromDaily(
   content: string,
   dateHeading: string,
   harvested: LogRow[],
+  header: string = TABLE_HEADER,
 ): string {
   let working = content;
   let lines = working.split("\n");
@@ -321,7 +340,7 @@ export function syncDayFromDaily(
   const existing = parseRowsInSection(working, dateHeading);
   const kept = existing.filter((r) => r.src !== SRC_DAILY);
   const merged = sortRows([...kept, ...harvested]);
-  const tableLines = [TABLE_HEADER, TABLE_SEP, ...merged.map(renderRow)];
+  const tableLines = [header, TABLE_SEP, ...merged.map(renderRow)];
 
   let first = -1;
   let last = -1;
@@ -354,6 +373,7 @@ export function insertRow(
   content: string,
   dateHeading: string,
   row: string,
+  header: string = TABLE_HEADER,
 ): string {
   const lines = content.split("\n");
   const headingIdx = lines.findIndex((l) => l.trim() === dateHeading);
@@ -362,7 +382,7 @@ export function insertRow(
     const tail = content.endsWith("\n") ? "" : "\n";
     return (
       content +
-      `${tail}\n${dateHeading}\n\n${TABLE_HEADER}\n${TABLE_SEP}\n${row}\n`
+      `${tail}\n${dateHeading}\n\n${header}\n${TABLE_SEP}\n${row}\n`
     );
   }
 
@@ -382,7 +402,7 @@ export function insertRow(
   }
 
   if (lastTableIdx === -1) {
-    lines.splice(headingIdx + 1, 0, "", TABLE_HEADER, TABLE_SEP, row);
+    lines.splice(headingIdx + 1, 0, "", header, TABLE_SEP, row);
   } else {
     lines.splice(lastTableIdx + 1, 0, row);
   }

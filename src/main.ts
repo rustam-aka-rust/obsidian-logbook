@@ -15,7 +15,6 @@ import {
 import {
   LogRow,
   SRC_TIMER,
-  TABLE_HEADER,
   TABLE_SEP,
   cell,
   dayTotalMs,
@@ -23,11 +22,13 @@ import {
   formatDuration,
   formatHuman,
   insertRow,
+  makeTableHeader,
   parseDailyMarkers,
   parseRowsInSection,
   syncDayFromDaily,
   upsertDayTotal,
 } from "./logbook-core";
+import { COLUMNS, Lang, Strings, getStrings, resolveLang } from "./i18n";
 
 const VIEW_TYPE = "logbook-panel";
 
@@ -48,6 +49,7 @@ interface LogbookSettings {
   knownCategories: string[];
   activeSession: ActiveSession | null;
   activityWords: number;
+  language: string; // "auto" | "en" | "ru"
 }
 
 const DEFAULT_SETTINGS: LogbookSettings = {
@@ -57,6 +59,7 @@ const DEFAULT_SETTINGS: LogbookSettings = {
   knownCategories: [],
   activeSession: null,
   activityWords: 7,
+  language: "auto",
 };
 
 // ---------------------------------------------------------------------------
@@ -65,43 +68,47 @@ const DEFAULT_SETTINGS: LogbookSettings = {
 
 export default class LogbookPlugin extends Plugin {
   settings: LogbookSettings;
+  t: Strings;
+  lang: Lang;
+  tableHeader: string;
   private statusBarEl: HTMLElement;
 
   async onload() {
     await this.loadSettings();
+    this.applyLocale();
 
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass("logbook-status");
     this.statusBarEl.onClickEvent(() => this.toggle());
 
-    this.addRibbonIcon("clock", "Logbook: старт / стоп", () => this.toggle());
-    this.addRibbonIcon("timer", "Logbook: панель", () => this.activateView());
+    this.addRibbonIcon("clock", this.t.ribbonToggle, () => this.toggle());
+    this.addRibbonIcon("timer", this.t.ribbonPanel, () => this.activateView());
 
     this.registerView(VIEW_TYPE, (leaf) => new LogbookView(leaf, this));
 
     this.addCommand({
       id: "open-panel",
-      name: "Открыть панель",
+      name: this.t.cmdOpenPanel,
       callback: () => this.activateView(),
     });
     this.addCommand({
       id: "start",
-      name: "Старт таймера",
+      name: this.t.cmdStart,
       callback: () => this.promptStart(),
     });
     this.addCommand({
       id: "stop",
-      name: "Стоп таймера",
+      name: this.t.cmdStop,
       callback: () => this.stopTimer(),
     });
     this.addCommand({
       id: "cancel",
-      name: "Отменить таймер (без записи)",
+      name: this.t.cmdCancel,
       callback: () => this.cancelTimer(),
     });
     this.addCommand({
       id: "harvest-daily",
-      name: "Собрать время из открытого дейлика",
+      name: this.t.cmdHarvest,
       callback: () => this.harvestActiveDaily(),
     });
 
@@ -124,6 +131,13 @@ export default class LogbookPlugin extends Plugin {
         if (f instanceof TFile && f.path.startsWith(folder)) this.refreshViews();
       }),
     );
+  }
+
+  /** Пересчитывает язык, строки и шапку таблицы из настроек. */
+  applyLocale() {
+    this.lang = resolveLang(this.settings.language);
+    this.t = getStrings(this.lang);
+    this.tableHeader = makeTableHeader(COLUMNS[this.lang]);
   }
 
   // --- Панель в сайдбаре ---------------------------------------------------
@@ -169,12 +183,12 @@ export default class LogbookPlugin extends Plugin {
   /** Старт сессии из панели/кода (валидирует «Занятие»). */
   async startActivity(activity: string, category: string) {
     if (this.settings.activeSession) {
-      new Notice("Таймер уже идёт. Сначала «Стоп».");
+      new Notice(this.t.alreadyRunning);
       return;
     }
     const a = activity.trim();
     if (!a) {
-      new Notice("Поле «Занятие» обязательно.");
+      new Notice(this.t.activityRequired);
       return;
     }
     this.settings.activeSession = {
@@ -185,7 +199,7 @@ export default class LogbookPlugin extends Plugin {
     await this.saveSettings();
     this.refreshStatusBar();
     this.refreshViews();
-    new Notice(`▶ ${a}`);
+    new Notice(this.t.started(a));
   }
 
   private toggle() {
@@ -197,11 +211,12 @@ export default class LogbookPlugin extends Plugin {
 
   promptStart() {
     if (this.settings.activeSession) {
-      new Notice("Таймер уже идёт. Сначала «Стоп».");
+      new Notice(this.t.alreadyRunning);
       return;
     }
     new StartTimerModal(
       this.app,
+      this.t,
       this.settings.knownCategories,
       (activity, category) => this.startActivity(activity, category),
     ).open();
@@ -212,7 +227,7 @@ export default class LogbookPlugin extends Plugin {
   async stopTimer() {
     const session = this.settings.activeSession;
     if (!session) {
-      new Notice("Таймер не запущен.");
+      new Notice(this.t.notRunning);
       return;
     }
     const start = moment(session.startISO);
@@ -220,12 +235,12 @@ export default class LogbookPlugin extends Plugin {
     try {
       await this.writeEntry(session, start, end);
     } catch (e) {
-      console.error("Logbook: ошибка записи интервала", e);
-      new Notice("Logbook: не удалось записать интервал (см. консоль).");
+      console.error("Logbook: write error", e);
+      new Notice(this.t.writeFail);
       return; // сессию не теряем — можно повторить «Стоп»
     }
     this.rememberCategory(session.category);
-    new Notice(`⏹ ${session.activity} · ${formatHuman(end.diff(start))}`);
+    new Notice(this.t.stopped(session.activity, formatHuman(end.diff(start))));
     this.settings.activeSession = null;
     await this.saveSettings();
     this.refreshStatusBar();
@@ -234,14 +249,14 @@ export default class LogbookPlugin extends Plugin {
 
   async cancelTimer() {
     if (!this.settings.activeSession) {
-      new Notice("Таймер не запущен.");
+      new Notice(this.t.notRunning);
       return;
     }
     this.settings.activeSession = null;
     await this.saveSettings();
     this.refreshStatusBar();
     this.refreshViews();
-    new Notice("Таймер отменён, ничего не записано.");
+    new Notice(this.t.canceled);
   }
 
   // --- Сбор из дейлика -----------------------------------------------------
@@ -249,19 +264,19 @@ export default class LogbookPlugin extends Plugin {
   async harvestActiveDaily() {
     const file = this.app.workspace.getActiveFile();
     if (!file) {
-      new Notice("Открой дейлик и повтори.");
+      new Notice(this.t.openDaily);
       return;
     }
     const date = moment(file.basename, "YYYY-MM-DD", true);
     if (!date.isValid()) {
-      new Notice("Активный файл не похож на дейлик (ожидаю имя YYYY-MM-DD).");
+      new Notice(this.t.notDaily);
       return;
     }
 
     const content = await this.app.vault.read(file);
     const harvested = parseDailyMarkers(content, this.settings.activityWords);
     if (harvested.length === 0) {
-      new Notice("В дейлике не нашёл маркеров времени вида [..].");
+      new Notice(this.t.noMarkers);
       return;
     }
 
@@ -273,7 +288,9 @@ export default class LogbookPlugin extends Plugin {
     const dateHeading = `## ${date.format("YYYY-MM-DD")}`;
 
     const apply = (data: string): string =>
-      ensureCssClass(syncDayFromDaily(data, dateHeading, harvested));
+      ensureCssClass(
+        syncDayFromDaily(data, dateHeading, harvested, this.tableHeader),
+      );
 
     try {
       const existing = this.app.vault.getAbstractFileByPath(filePath);
@@ -283,15 +300,13 @@ export default class LogbookPlugin extends Plugin {
         await this.app.vault.create(filePath, apply(`# TimeLog ${monthLabel}\n`));
       }
     } catch (e) {
-      console.error("Logbook: ошибка сбора из дейлика", e);
-      new Notice("Logbook: не удалось собрать из дейлика (см. консоль).");
+      console.error("Logbook: harvest error", e);
+      new Notice(this.t.harvestFail);
       return;
     }
 
     this.refreshViews();
-    new Notice(
-      `📓 Собрано из дейлика: ${harvested.length} зап. за ${date.format("YYYY-MM-DD")}.`,
-    );
+    new Notice(this.t.harvested(harvested.length, date.format("YYYY-MM-DD")));
   }
 
   // --- Запись в файл -------------------------------------------------------
@@ -318,7 +333,9 @@ export default class LogbookPlugin extends Plugin {
       `| ${SRC_TIMER} |`;
 
     const withTotal = (data: string): string => {
-      let next = ensureCssClass(insertRow(data, dateHeading, row));
+      let next = ensureCssClass(
+        insertRow(data, dateHeading, row, this.tableHeader),
+      );
       next = upsertDayTotal(
         next,
         dateHeading,
@@ -334,7 +351,7 @@ export default class LogbookPlugin extends Plugin {
       const monthLabel = start.format(this.settings.fileNameFormat);
       const base =
         `# TimeLog ${monthLabel}\n\n${dateHeading}\n\n` +
-        `${TABLE_HEADER}\n${TABLE_SEP}\n`;
+        `${this.tableHeader}\n${TABLE_SEP}\n`;
       // insertRow дозапишет строку под уже существующий заголовок дня.
       await this.app.vault.create(filePath, withTotal(base));
     }
@@ -363,15 +380,15 @@ export default class LogbookPlugin extends Plugin {
   private refreshStatusBar() {
     const s = this.settings.activeSession;
     if (!s) {
-      this.statusBarEl.setText("○ Logbook");
+      this.statusBarEl.setText(this.t.statusIdle);
       this.statusBarEl.removeClass("is-running");
-      this.statusBarEl.setAttribute("aria-label", "Logbook: старт таймера");
+      this.statusBarEl.setAttribute("aria-label", this.t.ariaStart);
       return;
     }
     const dur = formatDuration(moment().diff(moment(s.startISO)));
     this.statusBarEl.setText(`● ${dur} · ${s.activity}`);
     this.statusBarEl.addClass("is-running");
-    this.statusBarEl.setAttribute("aria-label", "Logbook: стоп таймера");
+    this.statusBarEl.setAttribute("aria-label", this.t.ariaStop);
   }
 
   // --- Настройки -----------------------------------------------------------
@@ -425,6 +442,7 @@ class LogbookView extends ItemView {
   }
 
   async render() {
+    const t = this.plugin.t;
     const root = this.contentEl;
     root.empty();
     root.addClass("logbook-panel");
@@ -435,7 +453,7 @@ class LogbookView extends ItemView {
     // Total за сегодня
     const total = root.createDiv({ cls: "lp-total" });
     total.createDiv({ cls: "lp-total-num", text: formatHuman(totalMs) });
-    total.createDiv({ cls: "lp-total-cap", text: "сегодня" });
+    total.createDiv({ cls: "lp-total-cap", text: t.panelToday });
 
     root.createEl("hr");
 
@@ -449,24 +467,24 @@ class LogbookView extends ItemView {
       ctrl.createDiv({ cls: "lp-activity", text: session.activity });
       const btns = ctrl.createDiv({ cls: "lp-btns" });
       btns
-        .createEl("button", { cls: "mod-cta", text: "Стоп" })
+        .createEl("button", { cls: "mod-cta", text: t.panelStop })
         .addEventListener("click", () => void this.plugin.stopTimer());
       btns
-        .createEl("button", { text: "Отмена" })
+        .createEl("button", { text: t.panelCancel })
         .addEventListener("click", () => void this.plugin.cancelTimer());
     } else {
       this.elapsedEl = null;
       const actField = ctrl.createDiv({ cls: "lp-field" });
-      actField.createEl("label", { text: "Занятие" });
+      actField.createEl("label", { text: t.fieldActivity });
       const actInput = actField.createEl("input");
       actInput.type = "text";
-      actInput.placeholder = "Что делаю…";
+      actInput.placeholder = t.phActivity;
 
       const catField = ctrl.createDiv({ cls: "lp-field" });
-      catField.createEl("label", { text: "Категория" });
+      catField.createEl("label", { text: t.fieldCategory });
       const catInput = catField.createEl("input");
       catInput.type = "text";
-      catInput.placeholder = "необязательно";
+      catInput.placeholder = t.phOptional;
       const listId = "logbook-panel-cats";
       const datalist = catField.createEl("datalist");
       datalist.id = listId;
@@ -477,9 +495,10 @@ class LogbookView extends ItemView {
 
       const start = ctrl.createEl("button", {
         cls: "mod-cta lp-start",
-        text: "▶ Старт",
+        text: t.panelStart,
       });
-      const go = () => void this.plugin.startActivity(actInput.value, catInput.value);
+      const go = () =>
+        void this.plugin.startActivity(actInput.value, catInput.value);
       start.addEventListener("click", go);
       for (const el of [actInput, catInput]) {
         el.addEventListener("keydown", (e) => {
@@ -493,9 +512,9 @@ class LogbookView extends ItemView {
 
     // Список за сегодня
     const today = root.createDiv({ cls: "lp-today" });
-    today.createDiv({ cls: "lp-today-h", text: "Сегодня" });
+    today.createDiv({ cls: "lp-today-h", text: t.panelTodayH });
     if (rows.length === 0) {
-      today.createDiv({ cls: "lp-empty", text: "пока пусто" });
+      today.createDiv({ cls: "lp-empty", text: t.panelEmpty });
     } else {
       for (const r of rows) {
         const item = today.createDiv({ cls: "lp-row" });
@@ -508,7 +527,7 @@ class LogbookView extends ItemView {
     root.createEl("hr");
 
     root
-      .createEl("button", { cls: "lp-harvest", text: "📓 Собрать дейлик" })
+      .createEl("button", { cls: "lp-harvest", text: t.panelHarvest })
       .addEventListener("click", () => void this.plugin.harvestActiveDaily());
   }
 }
@@ -518,6 +537,7 @@ class LogbookView extends ItemView {
 // ---------------------------------------------------------------------------
 
 class StartTimerModal extends Modal {
+  private t: Strings;
   private categories: string[];
   private onSubmit: (activity: string, category: string) => void;
   private activity = "";
@@ -525,20 +545,22 @@ class StartTimerModal extends Modal {
 
   constructor(
     app: App,
+    t: Strings,
     categories: string[],
     onSubmit: (activity: string, category: string) => void,
   ) {
     super(app);
+    this.t = t;
     this.categories = categories;
     this.onSubmit = onSubmit;
   }
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl("h3", { text: "Старт таймера" });
+    contentEl.createEl("h3", { text: this.t.modalTitle });
 
-    new Setting(contentEl).setName("Занятие").addText((t) => {
-      t.setPlaceholder("Что делаю…");
+    new Setting(contentEl).setName(this.t.fieldActivity).addText((t) => {
+      t.setPlaceholder(this.t.phActivity);
       t.onChange((v) => (this.activity = v));
       t.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") this.submit();
@@ -546,8 +568,8 @@ class StartTimerModal extends Modal {
       window.setTimeout(() => t.inputEl.focus(), 0);
     });
 
-    new Setting(contentEl).setName("Категория").addText((t) => {
-      t.setPlaceholder("необязательно");
+    new Setting(contentEl).setName(this.t.fieldCategory).addText((t) => {
+      t.setPlaceholder(this.t.phOptional);
       t.onChange((v) => (this.category = v));
 
       // datalist — автоподстановка прежних значений
@@ -564,7 +586,7 @@ class StartTimerModal extends Modal {
 
     new Setting(contentEl).addButton((b) =>
       b
-        .setButtonText("Старт")
+        .setButtonText(this.t.btnStart)
         .setCta()
         .onClick(() => this.submit()),
     );
@@ -573,7 +595,7 @@ class StartTimerModal extends Modal {
   private submit() {
     const activity = this.activity.trim();
     if (!activity) {
-      new Notice("Поле «Занятие» обязательно.");
+      new Notice(this.t.activityRequired);
       return;
     }
     this.close();
@@ -599,51 +621,68 @@ class LogbookSettingTab extends PluginSettingTab {
 
   display() {
     const { containerEl } = this;
+    const t = this.plugin.t;
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName("Папка logbook")
-      .setDesc("Куда складывать месячные файлы.")
-      .addText((t) =>
-        t.setValue(this.plugin.settings.folder).onChange(async (v) => {
+      .setName(t.setFolderName)
+      .setDesc(t.setFolderDesc)
+      .addText((c) =>
+        c.setValue(this.plugin.settings.folder).onChange(async (v) => {
           this.plugin.settings.folder = v.trim() || "TimeLog";
           await this.plugin.saveSettings();
         }),
       );
 
     new Setting(containerEl)
-      .setName("Шаблон имени файла")
-      .setDesc("Формат moment.js. По умолчанию YYYY-MM → один файл на месяц.")
-      .addText((t) =>
-        t.setValue(this.plugin.settings.fileNameFormat).onChange(async (v) => {
+      .setName(t.setFileFmtName)
+      .setDesc(t.setFileFmtDesc)
+      .addText((c) =>
+        c.setValue(this.plugin.settings.fileNameFormat).onChange(async (v) => {
           this.plugin.settings.fileNameFormat = v.trim() || "YYYY-MM";
           await this.plugin.saveSettings();
         }),
       );
 
     new Setting(containerEl)
-      .setName("Формат времени")
-      .setDesc("Формат moment.js для колонок Старт/Стоп.")
-      .addText((t) =>
-        t.setValue(this.plugin.settings.timeFormat).onChange(async (v) => {
+      .setName(t.setTimeFmtName)
+      .setDesc(t.setTimeFmtDesc)
+      .addText((c) =>
+        c.setValue(this.plugin.settings.timeFormat).onChange(async (v) => {
           this.plugin.settings.timeFormat = v.trim() || "HH:mm";
           await this.plugin.saveSettings();
         }),
       );
 
     new Setting(containerEl)
-      .setName("Слов в «Занятии» при сборе")
-      .setDesc(
-        "Сколько первых слов из дейлика попадёт в колонку «Занятие» (дальше — «…»).",
-      )
-      .addText((t) =>
-        t
+      .setName(t.setWordsName)
+      .setDesc(t.setWordsDesc)
+      .addText((c) =>
+        c
           .setValue(String(this.plugin.settings.activityWords))
           .onChange(async (v) => {
             const n = parseInt(v.trim(), 10);
             this.plugin.settings.activityWords =
               Number.isFinite(n) && n > 0 ? n : 7;
             await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName(t.setLangName)
+      .setDesc(t.setLangDesc)
+      .addDropdown((d) =>
+        d
+          .addOption("auto", t.langAuto)
+          .addOption("en", "English")
+          .addOption("ru", "Русский")
+          .setValue(this.plugin.settings.language)
+          .onChange(async (v) => {
+            this.plugin.settings.language = v;
+            await this.plugin.saveSettings();
+            this.plugin.applyLocale();
+            this.plugin.refreshViews();
+            this.display();
           }),
       );
   }
