@@ -409,6 +409,11 @@ export default class LogbookPlugin extends Plugin {
 class LogbookView extends ItemView {
   private plugin: LogbookPlugin;
   private elapsedEl: HTMLElement | null = null;
+  // Защита от гонки: refreshViews() может прилететь дважды на одно действие
+  // (явный вызов + событие vault "modify"). Сериализуем рендер и схлопываем
+  // лишние вызовы, иначе два await-рендера дают дубль панели.
+  private rendering = false;
+  private renderQueued = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: LogbookPlugin) {
     super(leaf);
@@ -442,13 +447,34 @@ class LogbookView extends ItemView {
   }
 
   async render() {
+    // Уже идёт рендер — отметим, что нужен ещё один, и выйдем.
+    if (this.rendering) {
+      this.renderQueued = true;
+      return;
+    }
+    this.rendering = true;
+    try {
+      await this.doRender();
+    } finally {
+      this.rendering = false;
+      if (this.renderQueued) {
+        this.renderQueued = false;
+        void this.render();
+      }
+    }
+  }
+
+  private async doRender() {
     const t = this.plugin.t;
     const root = this.contentEl;
-    root.empty();
-    root.addClass("logbook-panel");
 
+    // Данные тянем ДО очистки: empty() + построение делаем одним куском
+    // после await — атомарная замена, без мигания и без двойного DOM.
     const { totalMs, rows } = await this.plugin.getTodayData();
     const session = this.plugin.settings.activeSession;
+
+    root.empty();
+    root.addClass("logbook-panel");
 
     // Total за сегодня
     const total = root.createDiv({ cls: "lp-total" });
