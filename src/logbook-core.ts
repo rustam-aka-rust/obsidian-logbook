@@ -200,9 +200,12 @@ export function formatActivityLabel(text: string, maxWords = 7): string {
   return head + "…";
 }
 
-/** Текст описания после маркера: снимаем ведущие разделители (`-- `, `: `, `> `…). */
-function descAfterMarker(line: string, idx: number): string {
-  return line.slice(idx).replace(/^[\s\-–—:>*]+/, "").trim();
+/**
+ * Текст описания между маркером (`idx`) и началом следующего маркера (`end`,
+ * по умолчанию — конец строки): снимаем ведущие разделители (`-- `, `: `, `> `…).
+ */
+function descAfterMarker(line: string, idx: number, end: number = line.length): string {
+  return line.slice(idx, end).replace(/^[\s\-–—:>*]+/, "").trim();
 }
 
 /**
@@ -211,12 +214,16 @@ function descAfterMarker(line: string, idx: number): string {
  * - `[20m] описание` → только длительность (старт/стоп пустые).
  * Срабатывает только если внутри скобок — время по форме, и за `]` не идёт `(`
  * (чтобы не цеплять `[[вики]]`, `[текст](ссылку)` и заголовки `### 09:00 - 12:00`).
- * Один маркер на строку. Все строки помечаются источником 📓.
+ * Маркеров в строке может быть несколько: описание каждого — текст до начала
+ * следующего маркера (`[[вики]]` и ссылки в прозе при этом сохраняются).
+ * Все строки помечаются источником 📓.
  */
 export function parseDailyMarkers(content: string, maxWords = 7): LogRow[] {
   const rows: LogRow[] = [];
   const bracket = /\[([^[\]]+?)\]/g;
   for (const line of content.split("\n")) {
+    // 1) Собираем все валидные маркеры строки с их позициями (без описаний).
+    const found: { startIdx: number; tailIdx: number; row: Omit<LogRow, "activity"> }[] = [];
     bracket.lastIndex = 0;
     let mt: RegExpExecArray | null;
     while ((mt = bracket.exec(line)) !== null) {
@@ -230,30 +237,34 @@ export function parseDailyMarkers(content: string, maxWords = 7): LogRow[] {
         const b = clockToMin(iv[2]);
         if (a === null || b === null) continue;
         const dur = (b >= a ? b - a : b + 1440 - a) * 60000;
-        rows.push({
-          start: minToClock(a),
-          end: minToClock(b),
-          dur: formatHuman(dur),
-          category: "",
-          activity: formatActivityLabel(descAfterMarker(line, tailIdx), maxWords),
-          src: SRC_DAILY,
+        found.push({
+          startIdx: mt.index,
+          tailIdx,
+          row: { start: minToClock(a), end: minToClock(b), dur: formatHuman(dur), category: "", src: SRC_DAILY },
         });
-        break;
+        continue;
       }
 
       if (/^\s*(\d+\s*[hmsчмс]\s*)+$/iu.test(inner)) {
         const dur = parseDurationToMs(inner);
         if (dur <= 0) continue;
-        rows.push({
-          start: "",
-          end: "",
-          dur: formatHuman(dur),
-          category: "",
-          activity: formatActivityLabel(descAfterMarker(line, tailIdx), maxWords),
-          src: SRC_DAILY,
+        found.push({
+          startIdx: mt.index,
+          tailIdx,
+          row: { start: "", end: "", dur: formatHuman(dur), category: "", src: SRC_DAILY },
         });
-        break;
+        continue;
       }
+    }
+
+    // 2) Описание маркера — от его `]` до начала следующего маркера (или конца строки).
+    for (let i = 0; i < found.length; i++) {
+      const m = found[i];
+      const descEnd = i + 1 < found.length ? found[i + 1].startIdx : line.length;
+      rows.push({
+        ...m.row,
+        activity: formatActivityLabel(descAfterMarker(line, m.tailIdx, descEnd), maxWords),
+      });
     }
   }
   return rows;
